@@ -9,5 +9,5 @@ setup(
   url = 'https://github.com/x68507/zosapi',
   download_url = 'https://github.com/x68507/zosapi/tarball/0.1',
   keywords = ['zosapi', 'zemax', 'opticstudio'], 
-  classifiers = [],
+  classifiers = []
 )
