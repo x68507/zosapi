@@ -1,2 +1,4 @@
-.pypirc
+*.pypirc
 git_commands.txt
+dist/
+zosapi.egg-info
