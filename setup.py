@@ -26,7 +26,7 @@ setup(
   author = 'Michael Humphreys',
   author_email = 'michael.humphreys@zemax.com',
   url = 'https://github.com/x68507/zosapi',
-  download_url = 'https://github.com/x68507/zosapi/tarball/0.1',
+  download_url = 'https://github.com/x68507/zosapi/tarball/0.2',
   keywords = ['zosapi', 'zemax', 'opticstudio'], 
   classifiers = [],
   cmdclass={
