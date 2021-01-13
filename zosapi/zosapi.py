@@ -1,9 +1,26 @@
-import clr, os, winreg, ctypes, sys
-import numpy as np
-from System.Runtime.InteropServices import GCHandle, GCHandleType
-
+import clr, os, winreg
+from itertools import islice
 
 class PythonStandaloneApplication(object):
+    '''
+    A class to connect Pytyhon to Zemax OpticStudio API via PythonNET
+    
+    Properties
+    ----------
+    ZOSAPI
+        Namespace which contains enumerated variables
+    TheApplication
+        Interface which contains all information about the current ZOS-API connection
+    TheSystem
+        Interface which represents a complete optical system which corresponds to a single ZMX file
+    
+    Methods
+    -------
+    reshape          : System.Double[,], int, int, bool
+        Converts a System.Double[,] to a 2D list for plotting or post processing
+    transpose        : System.Double[,]
+        Transposes a 2D list; useful for converting mutli-dimensional line series (i.e. FFT PSF)
+    '''
     class LicenseException(Exception):
         pass
     class ConnectionException(Exception):
@@ -46,9 +63,6 @@ class PythonStandaloneApplication(object):
         # create a reference to the API namespace
         self.ZOSAPI = ZOSAPI
 
-        # create a reference to the API namespace
-        self.ZOSAPI = ZOSAPI
-
         # Create the initial connection class
         self.TheConnection = ZOSAPI.ZOSAPI_Connection()
 
@@ -73,42 +87,158 @@ class PythonStandaloneApplication(object):
         
         self.TheConnection = None
     
-    def OpenFile(self, filepath, saveIfNeeded):
-        if self.TheSystem is None:
-            raise PythonStandaloneApplication10.SystemNotPresentException("Unable to acquire Primary system")
-        self.TheSystem.LoadFile(filepath, saveIfNeeded)
+    def reshape(self, data, x, y, transpose = False):
+        """Converts a System.Double[,] to a 2D list for plotting or post processing
+        
+        Parameters
+        ----------
+        data      : System.Double[,] data directly from ZOS-API 
+        x         : x width of new 2D list [use var.GetLength(0) for dimension]
+        y         : y width of new 2D list [use var.GetLength(1) for dimension]
+        transpose : transposes data; needed for some multi-dimensional line series data
+        
+        Returns
+        -------
+        res       : 2D list; can be directly used with Matplotlib or converted to
+                    a numpy array using numpy.asarray(res)
+        """
+        if type(data) is not list:
+            data = list(data)
+        var_lst = [y] * x;
+        it = iter(data)
+        res = [list(islice(it, i)) for i in var_lst]
+        if transpose:
+            return self.transpose(res);
+        return res
+        
+    def transpose(self, data):
+        """Transposes a 2D list (Python3.x or greater).  
+        
+        Useful for converting mutli-dimensional line series (i.e. FFT PSF)
+        
+        Parameters
+        ----------
+        data      : Python native list (if using System.Data[,] object reshape first)    
+        
+        Returns
+        -------
+        res       : transposed 2D list
+        """
+        if type(data) is not list:
+            data = list(data)
+        return list(map(list, zip(*data)))
 
-    def CloseFile(self, save):
-        if self.TheSystem is None:
-            raise PythonStandaloneApplication10.SystemNotPresentException("Unable to acquire Primary system")
-        self.TheSystem.Close(save)
+# create a wrapper class so we don't have to write out 'PythonStandaloneApplication' each time
+class App(PythonStandaloneApplication):
+    '''
+    Wrapper class to shorten the name for initializing the PythonStandaloneApplication class
+    '''
+    def __init__(self):
+        super().__init__()
+        pass
+        
+class Interactive(object):
+    def __init__(self, instance = 0):
+        # determine the Zemax working directory
+        aKey = winreg.OpenKey(winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER), r"Software\Zemax", 0, winreg.KEY_READ)
+        zemaxData = winreg.QueryValueEx(aKey, 'ZemaxRoot')
+        NetHelper = os.path.join(os.sep, zemaxData[0], r'ZOS-API\Libraries\ZOSAPI_NetHelper.dll')
+        winreg.CloseKey(aKey)
 
-    def SamplesDir(self):
+        # add the NetHelper DLL for locating the OpticStudio install folder
+        clr.AddReference(NetHelper)
+        import ZOSAPI_NetHelper
+
+        pathToInstall = ''
+        # uncomment the following line to use a specific instance of the ZOS-API assemblies
+        #pathToInstall = r'C:\C:\Program Files\Zemax OpticStudio'
+
+        # connect to OpticStudio
+        success = ZOSAPI_NetHelper.ZOSAPI_Initializer.Initialize(pathToInstall);
+
+        zemaxDir = ''
+        if success:
+            zemaxDir = ZOSAPI_NetHelper.ZOSAPI_Initializer.GetZemaxDirectory();
+            print('Found OpticStudio at:   %s' + zemaxDir);
+        else:
+            raise Exception('Cannot find OpticStudio')
+
+        # load the ZOS-API assemblies
+        clr.AddReference(os.path.join(os.sep, zemaxDir, r'ZOSAPI.dll'))
+        clr.AddReference(os.path.join(os.sep, zemaxDir, r'ZOSAPI_Interfaces.dll'))
+        import ZOSAPI
+
+        # create a reference to the API namespace
+        self.ZOSAPI = ZOSAPI
+
+        self.TheConnection = self.ZOSAPI.ZOSAPI_Connection()
+        if self.TheConnection is None:
+            raise Exception("Unable to intialize NET connection to ZOSAPI")
+
+        self.TheApplication = self.TheConnection.ConnectAsExtension(instance)
         if self.TheApplication is None:
-            raise PythonStandaloneApplication10.InitializationException("Unable to acquire ZOSAPI application")
+            raise Exception("Unable to acquire ZOSAPI application")
 
-        return self.TheApplication.SamplesDir
+        if self.TheApplication.IsValidLicenseForAPI == False:
+            raise Exception("License is not valid for ZOSAPI use.  Make sure you have enabled 'Programming > Interactive Extension' from the OpticStudio GUI.")
 
-    def ExampleConstants(self):
-        if self.TheApplication.LicenseStatus == self.ZOSAPI.LicenseStatusType.PremiumEdition:
-            return "Premium"
-        elif self.TheApplication.LicenseStatus == self.ZOSAPI.LicenseStatusTypeProfessionalEdition:
-            return "Professional"
-        elif self.TheApplication.LicenseStatus == self.ZOSAPI.LicenseStatusTypeStandardEdition:
-            return "Standard"
-        else:
-            return "Invalid"
-    
-    def DoubleToNumpy(self, data):
-        if 'numpy' not in sys.modules:
-            print('You have not imported numpy into this file')
-            return False
-        else:
-            src_hndl = GCHandle.Alloc(data, GCHandleType.Pinned)
-            try:
-                src_ptr = src_hndl.AddrOfPinnedObject().ToInt64()
-                cbuf = (ctypes.c_double*len(data)).from_address(src_ptr)
-                npData = np.frombuffer(cbuf, dtype=np.float64)
-            finally:
-                if src_hndl.IsAllocated: src_hndl.Free()
-            return npData
+        self.TheSystem = self.TheApplication.PrimarySystem
+        if self.TheSystem is None:
+            raise Exception("Unable to acquire Primary system")
+    def __del__(self):
+        if self.TheApplication is not None:
+            self.TheApplication.CloseApplication()
+            self.TheApplication = None
+            del self.TheApplication
+        
+        self.TheConnection = None
+        del self.TheConnection
+    def reshape(self, data, x, y, transpose = False):
+        """Converts a System.Double[,] to a 2D list for plotting or post processing
+        
+        Parameters
+        ----------
+        data      : System.Double[,] data directly from ZOS-API 
+        x         : x width of new 2D list [use var.GetLength(0) for dimension]
+        y         : y width of new 2D list [use var.GetLength(1) for dimension]
+        transpose : transposes data; needed for some multi-dimensional line series data
+        
+        Returns
+        -------
+        res       : 2D list; can be directly used with Matplotlib or converted to
+                    a numpy array using numpy.asarray(res)
+        """
+        if type(data) is not list:
+            data = list(data)
+        var_lst = [y] * x;
+        it = iter(data)
+        res = [list(islice(it, i)) for i in var_lst]
+        if transpose:
+            return self.transpose(res);
+        return res
+        
+    def transpose(self, data):
+        """Transposes a 2D list (Python3.x or greater).  
+        
+        Useful for converting mutli-dimensional line series (i.e. FFT PSF)
+        
+        Parameters
+        ----------
+        data      : Python native list (if using System.Data[,] object reshape first)    
+        
+        Returns
+        -------
+        res       : transposed 2D list
+        """
+        if type(data) is not list:
+            data = list(data)
+        return list(map(list, zip(*data)))
+
+    #print('Connected to OpticStudio')
+
+    # The connection should now be ready to use.  For example:
+    #print('Serial #: ', TheApplication.SerialCode)
+
+    # Insert Code Here
+
+

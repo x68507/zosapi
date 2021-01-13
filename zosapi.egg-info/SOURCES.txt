@@ -1,0 +1,10 @@
+README.md
+setup.cfg
+setup.py
+zosapi/__init__.py
+zosapi/zosapi.py
+zosapi.egg-info/PKG-INFO
+zosapi.egg-info/SOURCES.txt
+zosapi.egg-info/dependency_links.txt
+zosapi.egg-info/requires.txt
+zosapi.egg-info/top_level.txt
