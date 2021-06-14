@@ -39,8 +39,6 @@ class PythonStandaloneApplication(object):
         clr.AddReference(NetHelper)
         import ZOSAPI_NetHelper
         
-        path = r'C:\Program Files\Zemax OpticStudio 181120\\'
-        
         # Find the installed version of OpticStudio
         #if len(path) == 0:
         if path is None:
