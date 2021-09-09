@@ -50,6 +50,7 @@ class PythonStandaloneApplication(object):
         # determine the ZOS root directory
         if isInitialized:
             dir = ZOSAPI_NetHelper.ZOSAPI_Initializer.GetZemaxDirectory()
+            print('Connected to OpticStudio at: %s' % dir)
         else:
             raise PythonStandaloneApplication.InitializationException("Unable to locate Zemax OpticStudio.  Try using a hard-coded path.")
 
